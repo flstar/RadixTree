@@ -98,7 +98,7 @@ uint64_t RadixTree::getFromEV(const byte *key, int16_t length, struct EdgeVector
 		// No such label
 		return 0UL;
 	}
-	else if (length < node->length_ || bcmp(key, node->label_, node->length_) != 0) {
+	else if (length < node->length_ || memcmp(key, node->label_, node->length_) != 0) {
 		// If node label is not a prefix of key,
 		// there is no chance to have this key
 		return 0UL;
@@ -127,7 +127,7 @@ void RadixTree::removeFromEV(const byte *key, int16_t length, EdgeVector *ev)
 		// No such label
 		return;
 	}
-	else if (length < node->length_ || bcmp(key, node->label_, node->length_) != 0) {
+	else if (length < node->length_ || memcmp(key, node->label_, node->length_) != 0) {
 		// If node label is not a prefix of key,
 		// there is no chance to have this key
 		return;
@@ -144,7 +144,7 @@ void RadixTree::removeFromEV(const byte *key, int16_t length, EdgeVector *ev)
 			// merge child
 			Node *nsub = subv->nodes_[0];
 			Node *nnode = Node::create(node->label_, node->length_ + nsub->length_, nsub->data_, true);
-			bcopy(nsub->label_, nnode->label_ + node->length_, nsub->length_);
+			memcpy(nnode->label_ + node->length_, nsub->label_, nsub->length_);
 			EdgeVector::destroy(subv);
 			ev->setAt(nnode);
 		}
@@ -192,5 +192,79 @@ void RadixTree::dump() const
 	printf("<root>:\n");
 	dumpEV(rootv_, indent);
 	printf("==============================================\n");
+}
+
+/**
+ *
+ */
+RadixTree::Node * RadixTree::nextInEV(byte *key, int16_t *len, const int16_t max_len, bool *equal, EdgeVector *ev)
+{
+	// search only at current level, possibly equal
+	bool equal2 = true;
+	Node *node = ev->nextFrom(key, len, max_len, &equal2);
+	if (node == nullptr) {
+		*len = 0;
+		*equal = false;
+		return nullptr;
+	}
+
+	// If *equal == false, equal leaf node is not allowed, we need to search again
+	if (!(*equal) && node->isleaf_ && equal2) {
+		equal2 = false;
+		node = ev->nextFrom(key, len, max_len, &equal2);
+	}
+	if (node == nullptr) {
+		*len = 0;
+		*equal = false;
+		return nullptr;
+	}
+
+	// For leaf node, return the node
+	if (node->isleaf_) {
+		*equal = equal2;
+		return node;
+	}
+	
+	// For inner node, search next level
+	bool nequal = (*equal) || (!equal2);
+	*len -= node->length_;
+	Node *nnode = nextInEV(key + node->length_, len, max_len - node->length_, &nequal, (EdgeVector*)(node->data_));
+	*len += node->length_;
+	
+	// If equal2 == false, the key has been truncated so we are seraching >= ""
+	// Given node is an inner node, it should never return nullptr for >= ""
+	// So if only equal2 == true, it's possible to return nullptr
+	// So we set equal2 = true and search at this level again
+	if (nnode == nullptr) {
+		equal2 = false;
+		node = ev->nextFrom(key, len, max_len, &equal2);
+		if (node == nullptr) {
+			*len = 0;
+			*equal = false;
+			return nullptr;
+		}
+		else if (node->isleaf_) {
+			*equal = false;
+			return node;
+		}
+		else {
+			nequal = true;
+			*len -= node->length_;
+			Node *nnode = nextInEV(key + node->length_, len, max_len - node->length_, &nequal, (EdgeVector*)(node->data_));
+			*len += node->length_;
+		}
+	}
+
+	// Now nnode must *NOT* be nullptr
+	assert(nnode != nullptr);
+	*equal = equal2 && nequal;
+	return node;
+}
+
+void RadixTree::next(byte *key, int16_t *len, const int16_t max_len)
+{
+	bool equal = false;
+	nextInEV(key, len, max_len, &equal, rootv_);
+	return;
 }
 

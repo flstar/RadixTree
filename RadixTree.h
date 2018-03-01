@@ -3,12 +3,13 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 typedef unsigned char byte;
 
 class RadixTree					// RadixTree
 {
-	static int16_t b2v(int16_t length, const byte b[]) {
+	static inline int16_t b2v(int16_t length, const byte b[]) {
 		if (length == 0) {
 			return -1;
 		}
@@ -45,7 +46,7 @@ class RadixTree					// RadixTree
 		// If length_ == 0, return -1 as null
 		// If length_ > 0, return the unsigned value of first char in label_
 		// So that we defined null < '\0'
-		int16_t firstByte()
+		inline int16_t firstByte()
 		{
 			return b2v(length_, label_);
 		}
@@ -161,6 +162,86 @@ class RadixTree					// RadixTree
 			nodes_[i] = node;
 			size_ ++;
 		}
+
+		/** @brief
+		 * Search node whose label:
+		 *  - > key[0:length] if *equal == false
+		 *  - >= key[0:length] if *equal == true
+		 *
+		 * key, *len and *equal might be changed to match the node returned
+		 *
+		 * @return return the node found, or nullptr if it does not exist
+		 * if nullptr is returned, key and *len won't be changed
+		 */
+		Node * nextFrom(byte *key, int16_t *len, const int16_t max_len, bool *equal)
+		{
+			int16_t low = 0, high = size_ - 1;
+ 
+			// At any time we have: [low - 1] < key < [high + 1]
+			while (low <= high) {
+				int16_t mid = (low + high) / 2;
+				Node *node = nodes_[mid];
+				int16_t minlen = std::min((*len), int16_t(node->length_));
+				int ret = memcmp(key, node->label_, minlen);
+				
+				if (ret < 0 || (ret == 0 && (*len) < node->length_)) {
+					high = mid - 1;
+					if (high < low) {
+						// if only previously high == low + 1 or high == low, so mid == low, and key < [mid],
+						// we get mid = low and high = low - 1, thus enter into this branch
+						assert(low == mid && high == mid - 1);
+						// At any time we have: [low - 1] < key < [high + 1]
+						// now mid == low, so we have [mid - 1] < key < [mid]
+						// so [mid] is the least elemment > key
+						assert(node->length_ <= max_len);
+						memcpy(key, node->label_, node->length_);
+						*len = node->length_;
+						*equal = false;
+						return node;
+					}
+				}
+				else if (ret > 0) {
+					// if only previously high == low, so mid == high == low, and key > [mid]
+					// we get low = mid + 1 and high = mid, thus enter into this branch
+					low = mid + 1;
+					if (high < low) {
+						assert(high == mid && low == mid + 1);
+						// At any time we have: [low - 1] < key < [high + 1]
+						// now mid == high, so we have [mid] < key < [high + 1] = [mid + 1]
+						// so [mid + 1] is the least element > key
+						*equal = false;
+						if (mid + 1 >= size_) {
+							// if [mid + 1] is out of range, there is no sucn an element
+							return nullptr;
+						}
+						else {
+							node = nodes_[mid + 1];
+							assert(node->length_ <= max_len);
+							memcpy(key, node->label_, node->length_);
+							*len = node->length_;
+							return node;
+						}
+					}
+				}
+				else { // ret == 0 && (*len) >= node->length_)
+					if (*equal) {
+						return node;
+					}
+					else if (mid + 1 >= size_) {
+						return nullptr;
+					}
+					else {
+						node = nodes_[mid + 1];
+						assert(node->length_ <= max_len);
+						memcpy(key, node->label_, node->length_);
+						*len = node->length_;
+						return node;
+					}
+				}
+			}
+			// no element at all
+			return nullptr;
+		}
 	};
 
 	public:
@@ -174,12 +255,20 @@ class RadixTree					// RadixTree
 		void remove(const byte *key, int16_t length);
 		void remove(const char *key) { return remove((const byte*)key, strlen(key)); }
 		void dump() const;
+		void next(byte *key, int16_t *len, const int16_t max_len);
+		void next(char *key, const int16_t max_len)
+		{
+			int16_t len = strlen(key);
+			next((byte*)key, &len, max_len - 1);
+			key[len] = '\0';
+		}
 	private:
 		struct EdgeVector * rootv_;
 		uint64_t getFromEV(const byte *key, int16_t length, struct EdgeVector *) const;
 		void putToEV(const byte *key, int16_t length, const uint64_t data, EdgeVector *ev);
 		void dumpEV(EdgeVector * ev, char * indent) const;
 		void removeFromEV(const byte *key, int16_t length, EdgeVector *ev);
+		Node * nextInEV(byte *key, int16_t *len, const int16_t max_len, bool *equal, EdgeVector *ev);
 		void releaseEV(EdgeVector *ev);
 };
 

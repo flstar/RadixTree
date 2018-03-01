@@ -130,9 +130,37 @@ TEST(HashMap, TPS)
 	}
 }
 
+TEST(RadixTree, Traverse)
+{
+	RadixTree t;
+
+	t.put("test", 1);
+	t.put("test123", 123);
+	t.put("test567", 567);
+	t.put("a", 100);
+	t.put("z", 100);
+	t.dump();
+	
+	char key[4096];
+	strcpy(key, "");
+
+	printf("============= Begin =============\n");
+	while (true) {
+		t.next(key, sizeof(key));
+		if(strlen(key) == 0) {
+			break;
+		}
+		else {
+			printf(" - %s\n", key);
+		}
+	}
+	printf("============== end ==============\n");
+
+}
 
 int main(int argc, char *argv[])
 {
 	::testing::InitGoogleTest(&argc, argv);
 	return RUN_ALL_TESTS();
 }
+

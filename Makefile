@@ -22,4 +22,4 @@ test: default
 	./$(TARGET)
 
 clean:
-	rm -f $(TARGET) $(OBJS)
+	rm -f $(TARGET) $(OBJS) *.stackdump
