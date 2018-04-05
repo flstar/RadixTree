@@ -200,7 +200,7 @@ class RadixTree					// RadixTree
 						return node;
 					}
 				}
-				else if (ret > 0) {
+				else if (ret > 0 || (node->length_ == 0 && *len > 0)) {
 					// if only previously high == low, so mid == high == low, and key > [mid]
 					// we get low = mid + 1 and high = mid, thus enter into this branch
 					low = mid + 1;
